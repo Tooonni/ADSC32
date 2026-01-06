@@ -5,12 +5,18 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "altair>=6.0.0",
+    "contextily>=1.7.0",
     "folium>=0.20.0",
     "matplotlib>=3.10.8",
     "mesa>=3.3.1",
+    "networkx>=3.6.1",
     "owslib>=0.35.0",
     "pandas>=2.3.3",
     "pyarrow>=22.0.0",
     "pyproj>=3.7.2",
     "requests>=2.32.5",
+    "solara>=1.56.0",
+    "streamlit>=1.52.2",
+    "streamlit-folium>=0.26.0",
 ]
