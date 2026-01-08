@@ -5,155 +5,186 @@ import pandas as pd
 import random 
 from model import BerlinCityModel
 
-# --- 1. Konfiguration der Seite ---
-st.set_page_config(
-    page_title="Berlin Tree Simulation",
-    page_icon="🌳",
-    layout="wide"
-)
+# --- 1. Config ---
+st.set_page_config(page_title="Berlin Tree Simulation", page_icon="🌳", layout="wide")
+st.title("🌳 Labor: Bäume in Friedrichshain-Kreuzberg")
 
-st.title("🌳 Simulation: Straßenbäume in Friedrichshain-Kreuzberg")
-
-# CSS für schönere Metrik-Boxen
 st.markdown("""
 <style>
-    div[data-testid="stMetricValue"] {
-        font-size: 24px;
-    }
+    div[data-testid="stMetricValue"] { font-size: 24px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. Session State initialisieren ---
-# Damit das Modell nicht gelöscht wird, wenn du einen Button klickst
+# --- 2. State ---
 if 'model' not in st.session_state:
     st.session_state.model = None
 if 'simulation_started' not in st.session_state:
     st.session_state.simulation_started = False
 
-# --- 3. Sidebar: Einstellungen ---
-st.sidebar.header("⚙️ Einstellungen")
+# --- 3. Sidebar: Initialisierung ---
+st.sidebar.header("1. Setup")
 
-# Schieberegler für das Klima
-precip_start = st.sidebar.slider("Start-Niederschlag (mm)", 300, 800, 550, help="Durchschnitt Berlin: ca. 570mm")
-precip_decline = st.sidebar.slider("Trockenheit-Trend (mm/Jahr)", 0, 20, 5, help="Wie viel weniger Regen pro Jahr?")
-
-# Start-Button
 if st.sidebar.button("🌱 Simulation Starten / Reset"):
-    with st.spinner('Lade Baumdaten und initialisiere Welt...'):
-        data_path = 'clean_baumbestand_berlin.parquet'
-        # Modell neu erstellen
-        st.session_state.model = BerlinCityModel(data_path, precip_start, precip_decline)
+    with st.spinner('Lade Baumdaten...'):
+        data_path = 'data/clean_baumbestand_berlin.parquet'
+        st.session_state.model = BerlinCityModel(data_path)
         st.session_state.simulation_started = True
-    st.sidebar.success(f"Modell geladen! {len(st.session_state.model.schedule.agents)} Bäume bereit.")
+    st.sidebar.success("Modell geladen!")
 
-# Schritt-Button (nur sichtbar, wenn Simulation läuft)
+# --- 4. Sidebar: Steuerung ---
 if st.session_state.simulation_started:
     st.sidebar.markdown("---")
-    if st.sidebar.button("⏩ Ein Jahr simulieren", type="primary"):
-        with st.spinner(f'Simuliere Jahr {st.session_state.model.year + 1}...'):
-            st.session_state.model.step()
+    st.sidebar.header(f"2. Wetter für Jahr {st.session_state.model.year + 1}")
+    
+    # --- REGLER ---    
+    next_precip = st.sidebar.slider(
+        "Ø Jahres-Niederschlag (mm)", 
+        min_value=200, max_value=800, value=570, step=10,
+        help="Berlin Normal: ca. 570mm. Dürre: < 450mm."
+    )
+    
+    next_temp = st.sidebar.slider(
+        "Ø Jahres-Temperatur (°C)", 
+        min_value=8.0, max_value=16.0, value=10.5, step=0.1,
+        help="Berlin Normal: ~10°C. Klimawandel-Szenario: > 12°C. (Achtung: 1°C Unterschied im Jahresmittel ist enorm!)"
+    )
+    
+    # Simulations-Button
+    if st.sidebar.button("⏩ Dieses Jahr simulieren", type="primary"):
+        model = st.session_state.model
+        
+        # Werte übertragen
+        model.current_precipitation = next_precip
+        model.current_temp = next_temp
+        
+        with st.spinner(f'Simuliere Jahr {model.year + 1}...'):
+            model.step()
 
-# --- 4. Hauptbereich ---
-
+# --- 5. Hauptbereich ---
 if st.session_state.model is None:
-    st.info("👈 Bitte starte die Simulation über den Button in der Sidebar.")
-    st.markdown("### Über diese App")
-    st.markdown("""
-    Diese Simulation zeigt die Auswirkung von zunehmender Trockenheit auf den Baumbestand in Friedrichshain-Kreuzberg.
-    - **Grüne Punkte:** Gesunde Bäume.
-    - **Gelbe/Orangen Punkte:** Bäume unter Wasserstress.
-    - **Rote Punkte:** Abgestorbene Bäume.
-    - **Blaue Punkte:** Neu gepflanzte, resistente Arten (Zürgelbaum).
-    """)
+    st.info("👈 Bitte starte das Labor in der Sidebar.")
 else:
     model = st.session_state.model
 
-    # --- A. KPIs (Metriken) ---
-    col1, col2, col3, col4 = st.columns(4)
+    # --- KPIs ---
+    col1, col2, col3, col4, col5 = st.columns(5)
     
-    # Live-Daten aus dem Modell holen
     alive_trees = sum([1 for a in model.schedule.agents if a.status != "dead"])
-    dead_trees = model.dead_trees_count
-    current_year = model.year
-    precip = model.current_precipitation
     
-    col1.metric("Jahr", current_year)
+    col1.metric("Jahr", model.year)
     col2.metric("Lebende Bäume", f"{alive_trees:,}")
-    col3.metric("Abgestorben", dead_trees, delta_color="inverse")
-    col4.metric("Niederschlag", f"{precip} mm")
+    col3.metric("Tote Bäume", model.dead_trees_count, delta_color="inverse")
+    col4.metric("Neu gepflanzt", model.total_planted, delta_color="normal")
+    col5.metric("Klima (letztes Jahr)", f"{model.current_temp}°C / {model.current_precipitation}mm")
 
-    # --- B. Karte (Folium) ---
-    st.subheader("🗺️ Zustand der Bäume (Live-Karte)")
-    
-    # Basiskarte erstellen (Zentrum auf FK)
+    # --- Karte ---
+    st.subheader("🗺️ Zustand der Bäume")
     m = folium.Map(location=[52.50, 13.43], zoom_start=13, tiles="CartoDB dark_matter")
 
-    # --- SAMPLING LOGIK (WICHTIG!) ---
     all_agents = model.schedule.agents
-    total_agents = len(all_agents)
-    max_view = 3000 # Limit für den Browser
+    max_view = 3000
     
-    if total_agents > max_view:
-        # WICHTIG: random.seed nutzen, damit die Punkte beim Neuladen nicht "springen"
+    if len(all_agents) > max_view:
         random.seed(model.year) 
         display_agents = random.sample(all_agents, max_view)
-        st.caption(f"ℹ️ Performance-Modus: Zeige eine zufällige Auswahl von **{max_view}** aus **{total_agents}** Bäumen.")
+        st.caption(f"Zeige {max_view} zufällige Bäume.")
     else:
         display_agents = all_agents
 
-    # Punkte zeichnen
     for agent in display_agents:
-        # Standard: Grün
-        color = '#2ecc71' 
-        radius = 2
-        fill_opacity = 0.6
-        
-        # Status-Farben
-        if agent.status == 'dead':
-            color = '#e74c3c' # Rot
-            radius = 3
-            fill_opacity = 0.8
-        elif agent.status == 'critical':
-            color = '#e67e22' # Orange
-        elif agent.status == 'stressed':
-            color = '#f1c40f' # Gelb
-        
-        # Neupflanzungen überschreiben alles
-        if agent.is_new_planting:
-            color = '#3498db' # Blau
-            radius = 3.5
-            fill_opacity = 0.9
-            
-        # Sicherheits-Check: Hat der Agent Koordinaten?
-        if agent.folium_pos is None:
-            continue
+        if agent.folium_pos is None: continue
 
+        color = '#2ecc71' 
+        radius = 2; fill_opacity = 0.6
+        
+        if agent.status == 'dead':
+            color = '#e74c3c'; radius = 3; fill_opacity = 0.8
+        elif agent.status == 'critical':
+            color = '#e67e22' 
+        elif agent.status == 'stressed':
+            color = '#f1c40f' 
+        
+        if agent.is_new_planting:
+            color = '#3498db'; radius = 3.5; fill_opacity = 0.9
+            
         folium.CircleMarker(
-            # HIER ÄNDERN: agent.folium_pos nutzen!
-            location=[agent.folium_pos[0], agent.folium_pos[1]], 
-            radius=radius,
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=fill_opacity,
-            popup=None 
+            location=agent.folium_pos, radius=radius, color=color, 
+            fill=True, fill_color=color, fill_opacity=fill_opacity, popup=None 
         ).add_to(m)
 
     st_folium(m, width="100%", height=500, returned_objects=[])
 
-    # --- C. Statistiken (Graphen) ---
-    st.subheader("📊 Langzeit-Analyse")
+# --- Charts ---
+    st.subheader("📊 Analyse & Verlauf")
     
-    # Datenverlauf holen
+    # Daten holen
     stats_df = model.datacollector.get_model_vars_dataframe()
     
     if not stats_df.empty:
-        chart_col1, chart_col2 = st.columns(2)
+        # --- ZEILE 1: Temperatur & Niederschlag ---
+        c1, c2 = st.columns(2)
         
-        with chart_col1:
-            st.markdown("**Anzahl lebender Bäume**")
-            st.line_chart(stats_df["Alive Trees"], color="#2ecc71")
+        with c1:
+            st.markdown("##### 🌡️ Temperatur-Verlauf (°C)")
+            st.line_chart(stats_df["Avg Temp (Jahr)"], color="#e74c3c") # Rot
             
-        with chart_col2:
-            st.markdown("**Niederschlag (Klimawandel)**")
-            st.line_chart(stats_df["Precipitation"], color="#3498db")
+        with c2:
+            st.markdown("##### 🌧️ Niederschlag-Verlauf (mm)")
+            st.line_chart(stats_df["Precipitation"], color="#3498db") # Blau
+
+        st.markdown("---")
+
+# --- ZEILE 2: Baumarten Analyse (Top 5) ---
+        st.markdown("##### 🌳 Top 5 Baumarten (Status aktuell)")
+        
+        latest_species_data = stats_df["Species_Data"].iloc[-1]
+        
+        if latest_species_data:
+            data_for_chart = {}
+            
+            # Alle Arten sammeln
+            all_species = set([k.split('_')[0] for k in latest_species_data.keys()])
+            
+            for spec in all_species:
+                # 1. Lebend und Tot zählen
+                count_lebend = latest_species_data.get(f"{spec}_Lebend", 0)
+                count_tot = latest_species_data.get(f"{spec}_Tot", 0)
+                
+                # 2. Neue Bäume zählen
+                count_neu = 0
+                if spec == "Neu (Zürgelbaum)":
+                    count_neu = latest_species_data.get(f"Neu (Zürgelbaum)_Neu", 0)
+                
+                data_for_chart[spec] = {
+                    "Lebend": count_lebend,
+                    "Neu": count_neu,
+                    "Tot": count_tot
+                }
+            
+            # DataFrame erstellen
+            chart_df = pd.DataFrame.from_dict(data_for_chart, orient='index')
+            
+            # NaN durch 0 ersetzen (wichtig für die Summe)
+            chart_df = chart_df.fillna(0)
+            
+            # Top 5 berechnen (Inklusive der neuen Bäume)
+            chart_df['Total'] = chart_df.sum(axis=1)
+            chart_df = chart_df.sort_values('Total', ascending=False).head(5)
+            chart_df = chart_df.drop(columns=['Total'])
+            
+            # Spalten sortieren für die Farben
+            # Wenn "Neu" im DF fehlt (weil noch nichts gepflanzt), fügen wir es hinzu, damit Farben stimmen
+            if "Neu" not in chart_df.columns:
+                chart_df["Neu"] = 0
+            
+            chart_df = chart_df[["Lebend", "Neu", "Tot"]]
+            
+            # Zeichnen
+            st.bar_chart(
+                chart_df, 
+                color=["#2ecc71", "#3498db", "#e74c3c"], # Grün, Blau, Rot
+                stack=True
+            )
+            
+        else:
+            st.info("Noch keine Daten.")

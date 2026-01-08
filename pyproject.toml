@@ -16,7 +16,6 @@ dependencies = [
     "pyarrow>=22.0.0",
     "pyproj>=3.7.2",
     "requests>=2.32.5",
-    "solara>=1.56.0",
     "streamlit>=1.52.2",
     "streamlit-folium>=0.26.0",
 ]
