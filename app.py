@@ -79,7 +79,7 @@ else:
 
     # --- Karte ---
     st.subheader("🗺️ Zustand der Bäume")
-    m = folium.Map(location=[52.50, 13.43], zoom_start=13, tiles="CartoDB dark_matter")
+    m = folium.Map(location=[52.50, 13.43], zoom_start=13, tiles="CartoDB Voyager") #"CartoDB dark_matter"
 
     all_agents = model.schedule.agents
     max_view = 3000
@@ -112,6 +112,18 @@ else:
             fill=True, fill_color=color, fill_opacity=fill_opacity, popup=None 
         ).add_to(m)
 
+    # --- Legende für die Karte ---
+    st.markdown("""
+    <div style="background-color: #1e1e1e; padding: 10px; border-radius: 5px; border: 1px solid #333; margin-bottom: 10px;">
+        <span> Legende:</span>
+        <span style="color: #2ecc71; margin-right: 15px;">● <b>Vital:</b> Gesund (Health > 70)</span>
+        <span style="color: #f1c40f; margin-right: 15px;">● <b>Gestresst:</b> Trockenstress (40-70)</span>
+        <span style="color: #e67e22; margin-right: 15px;">● <b>Kritisch:</b> Stark geschädigt (< 40)</span>
+        <span style="color: #e74c3c; margin-right: 15px;">● <b>Tot:</b> Abgestorben (0)</span>
+        <span style="color: #3498db;">● <b>Neu:</b> Nachgepflanzt (Zürgelbaum)</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     st_folium(m, width="100%", height=500, returned_objects=[])
 
 # --- Charts ---
@@ -131,6 +143,17 @@ else:
         with c2:
             st.markdown("##### 🌧️ Niederschlag-Verlauf (mm)")
             st.line_chart(stats_df["Precipitation"], color="#3498db") # Blau
+
+        st.markdown("---")
+
+        st.markdown("##### 💀 Verlauf der Baumsterblichkeit (Kumuliert)")
+
+        # Wir nutzen die neue Variable aus dem DataCollector
+        if "Dead Trees Total" in stats_df.columns:
+            st.line_chart(stats_df["Dead Trees Total"], color="#e74c3c")
+        else:
+        # Fallback, falls der DataCollector noch nicht angepasst wurde
+            st.warning("Bitte ergänze 'Dead Trees Total' im DataCollector der model.py, um diesen Graph zu sehen.")
 
         st.markdown("---")
 

@@ -70,9 +70,9 @@ class TreeAgent(mesa.Agent):
             "Gleditschie": 0.6,
             "Zürgelbaum": 0.5,
             "Ailanthus": 0.6
-        }
-        
+        }      
         self.water_demand_factor = 1.1
+
         for key, factor in self.resilience_map.items():
             if key in str(self.art):
                 self.water_demand_factor = factor
@@ -194,6 +194,7 @@ class BerlinCityModel(mesa.Model):
         self.datacollector = mesa.DataCollector(
             model_reporters={
                 "Alive Trees": lambda m: sum([1 for a in m.schedule.agents if a.status != "dead"]),
+                "Dead Trees Total": lambda m: m.dead_trees_count,
                 "Avg Temp (Jahr)": "current_temp",
                 "Precipitation": "current_precipitation",
                 "Total Planted": "total_planted",
